@@ -167,7 +167,7 @@ public class CSVParser {
 			volunteerData[VOLUNTEER_ELEMENTARY_SCHOOL_INDEX] = hasElementary(fields[SCHOOL_PREFERENCE_INDEX]);
 			volunteerData[VOLUNTEER_MIDDLE_SCHOOL_INDEX] = hasMiddle(fields[SCHOOL_PREFERENCE_INDEX]);
 			volunteerData[VOLUNTEER_HIGH_SCHOOL_INDEX] = hasHigh(fields[SCHOOL_PREFERENCE_INDEX]);
-			volunteerData[VOLUNTEER_SMALL_GROUP_INDEX] = getSmallGroup(fields[SMALL_GROUP_INDEX]);
+			volunteerData[VOLUNTEER_SMALL_GROUP_INDEX] = fields[SMALL_GROUP_INDEX];
 			volunteerData[VOLUNTEER_NOTES_INDEX] = fields[NOTES_INDEX];
 			
 			coVolunteerData[COVOLUNTEER_ID_INDEX] = currentId+"";
@@ -254,14 +254,6 @@ public class CSVParser {
 		
 		public boolean hasCoVolunteers() {
 			return hasCoVolunteers;
-		}
-		
-		public String getSmallGroup(String smallGroup) {
-			if (smallGroup.contains("Yes")) {
-				return true+"";
-			} else {
-				return false+"";
-			}
 		}
 		
 		private String getCoVolunteers(String notes) {

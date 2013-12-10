@@ -7,7 +7,9 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import au.com.bytecode.opencsv.CSVReader;
 import au.com.bytecode.opencsv.CSVWriter;
@@ -37,37 +39,21 @@ public class CSVParser {
 	private static final int SMALL_GROUP_INDEX = 10;
 	private static final int NOTES_INDEX = 11;
 	
-	private static final int VOLUNTEER_ID_INDEX = 0;
-	private static final int VOLUNTEER_LAST_NAME_INDEX = 1;
-	private static final int VOLUNTEER_FIRST_NAME_INDEX = 2;
-	private static final int VOLUNTEER_SEATS_INDEX = 3;
-	private static final int VOLUNTEER_GENDER_INDEX = 4;
-	private static final int VOLUNTEER_ELEMENTARY_SCHOOL_INDEX = 5;
-	private static final int VOLUNTEER_MIDDLE_SCHOOL_INDEX = 6;
-	private static final int VOLUNTEER_HIGH_SCHOOL_INDEX = 7;
-	private static final int VOLUNTEER_SMALL_GROUP_INDEX = 8;
-	private static final int VOLUNTEER_NOTES_INDEX = 9;
-	private static final String[] VOLUNTEER_DATA_HEADER = {"ID","Last Name","First Name","Seats","Gender","Elementary","Middle","High","Small Group","Notes"};
-	
-	private static final int COVOLUNTEER_ID_INDEX = 0;
-	private static final int COVOLUNTEER_DATA_INDEX = 1;
-	private static final String[] COVOLUNTEER_HEADER = {"ID","Data"};
-	
-	private static final int AVAILABILITY_ID_INDEX = 0;
-	private static final int AVAILABILITY_START_DATE_INDEX = 1;
-	private static final int AVAILABILITY_END_DATE_INDEX = 2;
-	private static final String[] AVAILABILITY_HEADER = {"ID","Begin time","End time"};
-	
 	int currentId = 0;
 	private CSVReader reader = null;
 	private List<CSVEntry> entries = null;
+	private List<String[]> entryValues = new ArrayList<String[]>();
+	private String[] headings;
+	//private Map<String, String> coVolunteers = new HashMap<String, String>();
+	private List<String[]> coVolunteers = new ArrayList<String[]>();
+	private int drivingIndex = -1;
+	private int notesIndex = -1;
 
 	public CSVParser(String filename) {
 		try {
 			reader = new CSVReader(new FileReader(filename), ',');
 			System.out.println("File read.");
 			reader.readNext(); //Get rid of the first row
-			parseCSV();
 		} catch (FileNotFoundException e) {
 			e.printStackTrace();
 		} catch (IOException e) {
@@ -104,17 +90,49 @@ public class CSVParser {
 		this.entries = entries;
 	}
 	
+	public void processCurrentFields(String[] fields) {
+		
+		if (drivingIndex >= 0) {
+			
+			String s = fields[drivingIndex];
+			if (s.contains("Yes")) {
+				fields[drivingIndex] = s.charAt(5) + "";
+			} else {
+				fields[drivingIndex] = "0";
+			}
+		}
+		if (notesIndex >= 0) {
+			String notes = fields[notesIndex];
+			int coVolunteerIndex = notes.indexOf("Co-Volunteers");
+			if (coVolunteerIndex>=0) {
+				String covs = notes.substring(coVolunteerIndex + 13);
+				
+				int availabilityIndex = covs.indexOf("Availability");
+				int experienceIndex = covs.indexOf("Experience");
+				int interestIndex = covs.indexOf("Interest");
+				int breakIndex = -1;
+				
+				if (availabilityIndex >= 0) breakIndex = availabilityIndex;
+				if (experienceIndex >= 0) breakIndex = breakIndex>=0 ? Math.min(breakIndex,  experienceIndex) : experienceIndex;
+				if (interestIndex >= 0) breakIndex = breakIndex>=0 ? Math.min(breakIndex,  interestIndex) : interestIndex;
+				if (breakIndex >= 0) {
+					covs = covs.substring(0, breakIndex);
+				}
+				String[] covPair = {fields[0] + ", " + fields[1], covs};
+				coVolunteers.add(covPair);
+			}
+		}
+	}
+	
 	public List<CSVEntry> getEntries() {
 		return entries;
 	}
 	
 	public void writeBetterCSV(String filename) {
 		try {
-			CSVWriter writer = new CSVWriter(new FileWriter(filename+"-data.csv"), ',');
-			writer.writeNext(VOLUNTEER_DATA_HEADER);
-			for (CSVEntry entry: entries) {
-				writer.writeNext(entry.getVolunteerData());
-			}
+			CSVWriter writer = new CSVWriter(new FileWriter(filename+".csv"), ',');
+			writer.writeNext(headings);
+			writer.writeAll(entryValues);
 			writer.close();
 		} catch (IOException e) {
 			e.printStackTrace();
@@ -122,23 +140,9 @@ public class CSVParser {
 		
 		try {
 			CSVWriter writer = new CSVWriter(new FileWriter(filename+"-covs.csv"), ',');
-			writer.writeNext(COVOLUNTEER_HEADER);
-			for (CSVEntry entry: entries) {
-				writer.writeNext(entry.getCoVolunteerData());
-			}
-			writer.close();
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-		
-		try {
-			CSVWriter writer = new CSVWriter(new FileWriter(filename+"-availability.csv"), ',');
-			writer.writeNext(AVAILABILITY_HEADER);
-			for (CSVEntry entry: entries) {
-				for (String[] row: entry.getAvailability()) {
-					writer.writeNext(row);
-				}
-			}
+			String[] covsHead = {"name", "co-volunteers"};
+			writer.writeNext(covsHead);
+			writer.writeAll(coVolunteers);
 			writer.close();
 		} catch (IOException e) {
 			e.printStackTrace();
@@ -147,15 +151,28 @@ public class CSVParser {
 	
 	public class CSVEntry {
 		
-		private final String[] DAY_CONSTANTS = {"Monday","Tuesday","Wednesday","Thursday","Friday"};
+		private static final int VOLUNTEER_ID_INDEX = 0;
+		private static final int VOLUNTEER_LAST_NAME_INDEX = 1;
+		private static final int VOLUNTEER_FIRST_NAME_INDEX = 2;
+		private static final int VOLUNTEER_SEATS_INDEX = 3;
+		private static final int VOLUNTEER_GENDER_INDEX = 4;
+		private static final int VOLUNTEER_ELEMENTARY_SCHOOL_INDEX = 5;
+		private static final int VOLUNTEER_MIDDLE_SCHOOL_INDEX = 6;
+		private static final int VOLUNTEER_HIGH_SCHOOL_INDEX = 7;
+		private static final int VOLUNTEER_SMALL_GROUP_INDEX = 8;
+		private static final int VOLUNTEER_NOTES_INDEX = 9;
 		
-		private DateFormat readFormat = new SimpleDateFormat("hhaE");
-		private DateFormat prettyFormat = new SimpleDateFormat("E h:mma");
-
+		private static final int COVOLUNTEER_ID_INDEX = 0;
+		private static final int COVOLUNTEER_DATA_INDEX = 1;
+		
+		private static final int AVAILABILITY_ID_INDEX = 0;
+		private static final int AVAILABILITY_START_DATE_INDEX = 1;
+		private static final int AVAILABILITY_END_DATE_INDEX = 2;
+		
+		ArrayList<CSVField> fields = new ArrayList<CSVField>();
 		String[] volunteerData = new String[10];
 		String[] coVolunteerData = new String[2];
 		List<String[]> availability = new ArrayList<String[]>();
-		boolean hasCoVolunteers = false;
 		
 		public CSVEntry(String[] fields) {
 			
@@ -167,7 +184,7 @@ public class CSVParser {
 			volunteerData[VOLUNTEER_ELEMENTARY_SCHOOL_INDEX] = hasElementary(fields[SCHOOL_PREFERENCE_INDEX]);
 			volunteerData[VOLUNTEER_MIDDLE_SCHOOL_INDEX] = hasMiddle(fields[SCHOOL_PREFERENCE_INDEX]);
 			volunteerData[VOLUNTEER_HIGH_SCHOOL_INDEX] = hasHigh(fields[SCHOOL_PREFERENCE_INDEX]);
-			volunteerData[VOLUNTEER_SMALL_GROUP_INDEX] = getSmallGroup(fields[SMALL_GROUP_INDEX]);
+			volunteerData[VOLUNTEER_SMALL_GROUP_INDEX] = fields[SMALL_GROUP_INDEX];
 			volunteerData[VOLUNTEER_NOTES_INDEX] = fields[NOTES_INDEX];
 			
 			coVolunteerData[COVOLUNTEER_ID_INDEX] = currentId+"";
@@ -180,20 +197,28 @@ public class CSVParser {
 		
 		private void populateAvailability(String[] fields) {
 			
+			/*String monday_availability = fields[MONDAY_AVAILABILITY_INDEX];
+			String tuesday_availability = fields[TUESDAY_AVAILABILITY_INDEX];
+			String wednesday_availability = fields[WEDNESDAY_AVAILABILITY_INDEX];
+			String thursday_availability = fields[THURSDAY_AVAILABILITY_INDEX];
+			String friday_availability = fields[FRIDAY_AVAILABILITY_INDEX];*/
+			
 			String[] daily_availability = {fields[MONDAY_AVAILABILITY_INDEX],
 					fields[TUESDAY_AVAILABILITY_INDEX],
 					fields[WEDNESDAY_AVAILABILITY_INDEX],
 					fields[THURSDAY_AVAILABILITY_INDEX],
 					fields[FRIDAY_AVAILABILITY_INDEX]};
 			
-			for (int i=0; i<daily_availability.length; i++) {
+			String[] DAY_CONSTANTS = {"Monday","Tuesday","Wednesday","Thursday","Friday"};
+			
+			for (String dayString: daily_availability) {
 				
-				if (daily_availability[i].equals("")) continue;
+				if (dayString.equals("")) continue;
 				
 				String currentBegin = "";
 				String currentEnd="";
 				
-				for (String s: daily_availability[i].split(" ")) {
+				for (String s: dayString.split(" ")) {
 					
 					String begin = s.substring(0, s.indexOf("-"));
 					String end = s.substring(s.indexOf("-")+1);
@@ -202,34 +227,15 @@ public class CSVParser {
 						currentEnd = end;
 					} else {
 						if (!currentBegin.equals("")) {
-							addAvailability(currentBegin+DAY_CONSTANTS[i], currentEnd+DAY_CONSTANTS[i]);
+							availability.add(new String[] {currentId+"", currentBegin, currentEnd});
 						}
 						currentBegin = begin;
 						currentEnd = end;
 					}
 				}
-				addAvailability(currentBegin+DAY_CONSTANTS[i], currentEnd+DAY_CONSTANTS[i]);
+				availability.add(new String[] {currentId+"", currentBegin, currentEnd});
 			}
 			
-		}
-		
-		private void addAvailability(String begin, String end) {
-	
-			try {
-				Date beginDate = readFormat.parse(begin);
-				Date endDate = readFormat.parse(end);
-				begin = prettyFormat.format(beginDate);
-				end = prettyFormat.format(endDate);
-			} catch (ParseException e) {
-				e.printStackTrace();
-			}
-			
-			String[] availabilityString = new String[3];
-			availabilityString[AVAILABILITY_ID_INDEX] = currentId+"";
-			availabilityString[AVAILABILITY_START_DATE_INDEX] = begin;
-			availabilityString[AVAILABILITY_END_DATE_INDEX] = end;
-			
-			availability.add(availabilityString);
 		}
 		
 		private String calculateSeats(String driverInfo) {
@@ -252,23 +258,9 @@ public class CSVParser {
 			return schoolPrefs.contains("High") + "";
 		}
 		
-		public boolean hasCoVolunteers() {
-			return hasCoVolunteers;
-		}
-		
-		public String getSmallGroup(String smallGroup) {
-			if (smallGroup.contains("Yes")) {
-				return true+"";
-			} else {
-				return false+"";
-			}
-		}
-		
 		private String getCoVolunteers(String notes) {
 			int coVolunteerIndex = notes.indexOf("Co-Volunteers");
 			if (coVolunteerIndex>=0) {
-				hasCoVolunteers = true;
-				
 				String covs = notes.substring(coVolunteerIndex + 13);
 				
 				int availabilityIndex = covs.indexOf("Availability");
@@ -288,16 +280,8 @@ public class CSVParser {
 			}
 		}
 		
-		public String[] getVolunteerData() {
-			return volunteerData;
-		}
-		
-		public String[] getCoVolunteerData() {
-			return coVolunteerData;
-		}
-		
-		public List<String[]> getAvailability() {
-			return availability;
+		public ArrayList<CSVField> getFields() {
+			return fields;
 		}
 	}
 	
@@ -322,30 +306,55 @@ public class CSVParser {
 	
 	public static void main(String[] args) {
 		
-		CSVParser parser = new CSVParser("/Users/mjenny/Documents/test-volunteers3.csv");
+		List<String[]> availability = new ArrayList<String[]>();
+		
+		String dayString = "8am-10am 10am-11am 1pm-2pm 2pm-3pm";
+		
+		String currentBegin = "";
+		String currentEnd="";
+		
+		for (String s: dayString.split(" ")) {
+			
+			String begin = s.substring(0, s.indexOf("-"));
+			String end = s.substring(s.indexOf("-")+1);
+			
+			if (begin.equals(currentEnd)) {
+				currentEnd = end;
+			} else {
+				if (!currentBegin.equals("")) {
+					availability.add(new String[] {1+"", currentBegin, currentEnd});
+				}
+				currentBegin = begin;
+				currentEnd = end;
+			}
+		}
+		availability.add(new String[] {1+"", currentBegin, currentEnd});
+		
+		for (String[] strs: availability) {
+			for (String str: strs) {
+				System.out.print(str + "-");
+			}
+			System.out.print("\n");
+		}
+		
+		/*
+		DateFormat df = new SimpleDateFormat("haE");
+		DateFormat pretty = new SimpleDateFormat("E h:mma");
+		try {
+			Date date = df.parse("8amTue");
+			System.out.println(pretty.format(date));
+		} catch (ParseException e) {
+			e.printStackTrace();
+		}*/
+		/*CSVParser parser = new CSVParser("/Users/mjenny/Documents/test-volunteers3.csv");
 		List<CSVEntry> entries = parser.getEntries();
 		for (int i=0; i<10; i++) {
 			System.out.println("*****");
 			CSVEntry entry = entries.get(i);
-			System.out.print("Volunteer Data: ");
-			for (String s: entry.getVolunteerData()) {
-				System.out.print(s + " ");
+			for (CSVField field: entry.getFields()) {
+				System.out.println(field.getName() + ": " + field.getValue());
 			}
-			if (entry.hasCoVolunteers()) {
-				System.out.print("\nCo-Volunteer Data: ");
-				for (String s: entry.getCoVolunteerData()) {
-					System.out.print(s + " ");
-				}
-			}
-			System.out.print("\nAvailability Data: ");
-			for (String[] row: entry.getAvailability()) {
-				System.out.print("\n  ");
-				for (String s: row) {
-					System.out.print(s + " ");
-				}
-			}
-			System.out.print("\n");
-		}
-		parser.writeBetterCSV("/Users/mjenny/Documents/test-volunteers-better5");
+		}*/
+		//parser.writeBetterCSV("/Users/mjenny/Documents/test-volunteers-better4");
 	}
 }
