@@ -1,0 +1,114 @@
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+
+import au.com.bytecode.opencsv.CSVReader;
+
+public class CSVParser {
+	
+	private CSVReader reader = null;
+	private List<CSVEntry> entries = null;
+	private String[] headings;
+
+	public CSVParser(String filename) {
+		try {
+			reader = new CSVReader(new FileReader(filename), ',');
+			System.out.println("File read.");
+			headings = reader.readNext();
+			for (String s: headings) {
+				System.out.println("Heading: " + s);
+			}
+			parseCSV();
+		} catch (FileNotFoundException e) {
+			e.printStackTrace();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+	
+	private void parseCSV() {
+		
+		ArrayList<CSVEntry> entries = new ArrayList<CSVEntry>();
+		String[] nextLine = {""};
+		String[] currentFields = {""};
+		boolean isFirst = true;
+		try {
+			while((nextLine = reader.readNext()) != null) {
+				if (!nextLine[0].equals("")) {
+					if (!isFirst) entries.add(new CSVEntry(headings, currentFields));
+					else isFirst = false;
+					currentFields = nextLine;
+				} else {
+					for (int i=0; i<nextLine.length; i++) {
+						if (nextLine[i].equals("")) continue;
+						currentFields[i] += " " + nextLine[i];
+					}
+				}
+			}
+			entries.add(new CSVEntry(headings, currentFields));
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		
+		this.entries = entries;
+	}
+	
+	public List<CSVEntry> getEntries() {
+		return entries;
+	}
+	
+	public void writeBetterCSV(String filename) {
+		
+	}
+	
+	public class CSVEntry {
+		
+		ArrayList<CSVField> fields = new ArrayList<CSVField>();
+		
+		public CSVEntry(String[] names, String[] values) {
+			if (names.length == values.length) {
+				for (int i=0; i<names.length; i++) {
+					System.out.println("names[i] = " + names[i] + "; values[i] = " + values[i]);
+					fields.add(new CSVField(names[i], values[i]));
+				}
+			}
+		}
+		
+		public ArrayList<CSVField> getFields() {
+			return fields;
+		}
+	}
+	
+	public class CSVField {
+		
+		private String name;
+		private String value;
+		
+		public CSVField(String name, String value) {
+			this.name = name;
+			this.value = value;
+		}
+		
+		public String getName() {
+			return name;
+		}
+		
+		public String getValue() {
+			return value;
+		}
+	}
+	
+	public static void main(String[] args) {
+		CSVParser parser = new CSVParser("/Users/mjenny/Documents/test-volunteers.csv");
+		List<CSVEntry> entries = parser.getEntries();
+		for (int i=0; i<10; i++) {
+			System.out.println("*****");
+			CSVEntry entry = entries.get(i);
+			for (CSVField field: entry.getFields()) {
+				System.out.println(field.getName() + ": " + field.getValue());
+			}
+		}
+	}
+}
